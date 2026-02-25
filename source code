@@ -1,0 +1,112 @@
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import itertools
+
+st.title("Excel Comparison Tool (Multi‑File Version)")
+st.write("Upload up to 6 Excel files (.xlsx or .xlsm), select HO/ZO and Donut/Tophat, and compare Column L vs Column P from Sheet 6.")
+
+# Upload up to 6 files
+uploaded_files = st.file_uploader(
+    "Upload Excel files (max 6)", 
+    type=["xlsx", "xlsm"], 
+    accept_multiple_files=True
+)
+
+# Limit to 6 files
+if uploaded_files and len(uploaded_files) > 6:
+    st.error("Please upload no more than 6 files.")
+    st.stop()
+
+# HO/ZO selector (Column 3)
+category_hozo = st.selectbox("Select HO or ZO:", ["HO", "ZO"])
+
+# Donut/Tophat selector (Column H)
+category_shape = st.selectbox("Select Donut or Tophat:", ["Donut", "Tophat"])
+
+# Manual x-axis range inputs with 0.5 increments
+st.write("### Enter X‑axis Range (Column L)")
+x_min = st.number_input("Minimum X value", min_value=497.0, max_value=903.0, value=497.0, step=0.5)
+x_max = st.number_input("Maximum X value", min_value=497.0, max_value=903.0, value=903.0, step=0.5)
+
+if x_min > x_max:
+    st.error("Minimum X value cannot be greater than maximum X value.")
+    st.stop()
+
+if uploaded_files:
+    # Toggle controls
+    st.write("### Select which files to include")
+    file_toggles = {}
+    for file in uploaded_files:
+        file_toggles[file.name] = st.checkbox(f"Include {file.name}", value=True)
+
+    # Prepare layout
+    col_plot, col_table = st.columns([2, 1])
+
+    # Plot setup
+    fig, ax = plt.subplots(figsize=(10, 6))
+    color_cycle = itertools.cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+
+    # Table to store Y-differences
+    diff_rows = []
+
+    for file in uploaded_files:
+        if not file_toggles[file.name]:
+            continue  # Skip files toggled OFF
+
+        df = pd.read_excel(file, sheet_name=6, engine="openpyxl")
+
+        # Filter by HO/ZO and Donut/Tophat
+        df_f = df[(df.iloc[:, 3] == category_hozo) & (df.iloc[:, 7] == category_shape)]
+
+        # Extract columns L and P
+        x = df_f.iloc[:, 11]
+        y = df_f.iloc[:, 15]
+
+        # Apply x‑axis filtering
+        mask = (x >= x_min) & (x <= x_max)
+        x_f, y_f = x[mask], y[mask]
+
+        # Sort by x-value
+        df_sorted = pd.DataFrame({"x": x_f, "y": y_f}).sort_values("x")
+
+        if len(df_sorted) < 2:
+            continue
+
+        # Compute Y-difference × 100
+        y_diff = (df_sorted["y"].iloc[-1] - df_sorted["y"].iloc[0]) * 100
+
+        # Store for table
+        diff_rows.append({
+            "File": file.name,
+            "Y‑Difference ×100": y_diff
+        })
+
+        # Plot
+        color = next(color_cycle)
+        ax.scatter(df_sorted["x"], df_sorted["y"], s=40, color=color)
+        ax.plot(df_sorted["x"], df_sorted["y"], label=f"{file.name}", color=color)
+
+    # Finalize plot
+    ax.set_xlabel("Column L")
+    ax.set_ylabel("Column P")
+    ax.set_title(f"Comparison of Column L vs Column P ({category_hozo}, {category_shape})")
+    ax.grid(True)
+
+    # Legend below plot
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.15),
+        ncol=2,
+        frameon=True
+    )
+
+    with col_plot:
+        st.pyplot(fig)
+
+    with col_table:
+        st.write("### Y‑Difference × 100 (Within Range)")
+        if diff_rows:
+            st.dataframe(pd.DataFrame(diff_rows))
+        else:
+            st.write("No valid data in selected range or all files toggled off.")
