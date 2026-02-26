@@ -3,31 +3,64 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import itertools
 
-st.title("Excel Comparison Tool (Multi‑File Version)")
-st.write("Upload up to 6 Excel files (.xlsx or .xlsm), select HO/ZO and Donut/Tophat, and compare Column L vs Column P from Sheet 6.")
+st.title("12C T% Curve Comparison Tool (Internal Reports only)")
+st.write("Upload up to 10 Internal Reports (.xlsm), select HO/ZO and Donut/Tophat, and compare Transmission curves.")
 
-# Upload up to 6 files
+# Upload up to 10 files
 uploaded_files = st.file_uploader(
-    "Upload Excel files (max 6)", 
+    "Upload Excel files (max 10)", 
     type=["xlsx", "xlsm"], 
     accept_multiple_files=True
 )
 
-# Limit to 6 files
-if uploaded_files and len(uploaded_files) > 6:
-    st.error("Please upload no more than 6 files.")
+# Limit to 10 files
+if uploaded_files and len(uploaded_files) > 10:
+    st.error("Please upload no more than 10 files.")
     st.stop()
 
 # HO/ZO selector (Column 3)
 category_hozo = st.selectbox("Select HO or ZO:", ["HO", "ZO"])
 
 # Donut/Tophat selector (Column H)
-category_shape = st.selectbox("Select Donut or Tophat:", ["Donut", "Tophat"])
+category_shape = st.selectbox("Select Donut or Tophat:", ["Donut", "TopHat"])
 
-# Manual x-axis range inputs with 0.5 increments
-st.write("### Enter X‑axis Range (Column L)")
-x_min = st.number_input("Minimum X value", min_value=497.0, max_value=903.0, value=497.0, step=0.5)
-x_max = st.number_input("Maximum X value", min_value=497.0, max_value=903.0, value=903.0, step=0.5)
+# Preset X‑axis ranges
+preset_ranges = {
+    1:  (500.5, 515.5),
+    2:  (523.5, 540.5),
+    3:  (548.5, 565.5),
+    4:  (572.5, 591.5),
+    5:  (598.5, 617.5),
+    6:  (627.5, 644.5),
+    7:  (660.5, 679.5),
+    8:  (695.5, 714.5),
+    9:  (731.5, 752.5),
+    10: (768.0, 787.0),
+    11: (825.0, 852.0),
+    12: (873.5, 896.5)
+}
+
+st.write("### Choose T% Range")
+preset_choice = st.selectbox("Channels 1–12:", list(preset_ranges.keys()))
+preset_min, preset_max = preset_ranges[preset_choice]
+
+st.write("### Enter Wavelength Range")
+x_min = st.number_input(
+    "Minimum Wavelength (nm)",
+    min_value=497.0,
+    max_value=903.0,
+    value=preset_min,
+    step=0.5
+)
+
+x_max = st.number_input(
+    "Maximum Wavelength (nm)",
+    min_value=497.0,
+    max_value=903.0,
+    value=preset_max,
+    step=0.5
+)
+
 
 if x_min > x_max:
     st.error("Minimum X value cannot be greater than maximum X value.")
@@ -38,7 +71,7 @@ if uploaded_files:
     st.write("### Select which files to include")
     file_toggles = {}
     for file in uploaded_files:
-        file_toggles[file.name] = st.checkbox(f"Include {file.name}", value=True)
+        file_toggles[file.name] = st.checkbox(f"{file.name}", value=True)
 
     # Prepare layout
     col_plot, col_table = st.columns([2, 1])
@@ -73,13 +106,13 @@ if uploaded_files:
         if len(df_sorted) < 2:
             continue
 
-        # Compute Y-difference × 100
-        y_diff = (df_sorted["y"].iloc[-1] - df_sorted["y"].iloc[0]) * 100
+        #compute reduced band uniformity
+        y_diff = abs(df_sorted["y"].max() - df_sorted["y"].min()) * 100
 
         # Store for table
         diff_rows.append({
             "File": file.name,
-            "Y‑Difference ×100": y_diff
+            "Uniformity": y_diff
         })
 
         # Plot
@@ -87,11 +120,18 @@ if uploaded_files:
         ax.scatter(df_sorted["x"], df_sorted["y"], s=40, color=color)
         ax.plot(df_sorted["x"], df_sorted["y"], label=f"{file.name}", color=color)
 
+    # Toggle for fixed Y-axis range
+    use_fixed_y = st.checkbox("Use fixed Y-axis range (0.68 to 0.90)", value=False)
+
     # Finalize plot
-    ax.set_xlabel("Column L")
-    ax.set_ylabel("Column P")
-    ax.set_title(f"Comparison of Column L vs Column P ({category_hozo}, {category_shape})")
+    ax.set_xlabel("Wavelength")
+    ax.set_ylabel("Transmission")
+    ax.set_title(f"Comparison of Wavelength vs. Transmission ({category_hozo}, {category_shape})")
     ax.grid(True)
+    
+    if use_fixed_y:
+        ax.set_ylim(0.68, 0.90)
+
 
     # Legend below plot
     ax.legend(
@@ -105,7 +145,7 @@ if uploaded_files:
         st.pyplot(fig)
 
     with col_table:
-        st.write("### Y‑Difference × 100 (Within Range)")
+        st.write("### Y‑Difference (Within Range)")
         if diff_rows:
             st.dataframe(pd.DataFrame(diff_rows))
         else:
