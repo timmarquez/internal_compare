@@ -6,22 +6,21 @@ import itertools
 st.title("12C T% Curve Comparison Tool (Internal Reports only)")
 st.write("Upload up to 10 Internal Reports (.xlsm), select HO/ZO and Donut/Tophat, and compare Transmission curves.")
 
-# Upload up to 10 files
+# Upload up to 10 Internal Reports
 uploaded_files = st.file_uploader(
     "Upload Excel files (max 10)", 
     type=["xlsx", "xlsm"], 
     accept_multiple_files=True
 )
 
-# Limit to 10 files
 if uploaded_files and len(uploaded_files) > 10:
     st.error("Please upload no more than 10 files.")
     st.stop()
 
-# HO/ZO selector (Column 3)
+# HO/ZO selector
 category_hozo = st.selectbox("Select HO or ZO:", ["HO", "ZO"])
 
-# Donut/Tophat selector (Column H)
+# Donut/Tophat selector
 category_shape = st.selectbox("Select Donut or Tophat:", ["Donut", "TopHat"])
 
 # Preset X‑axis ranges
@@ -67,40 +66,42 @@ if x_min > x_max:
     st.stop()
 
 if uploaded_files:
-    # Toggle controls
     st.write("### Select which files to include")
     file_toggles = {}
     for file in uploaded_files:
         file_toggles[file.name] = st.checkbox(f"{file.name}", value=True)
 
-    # Prepare layout
     col_plot, col_table = st.columns([2, 1])
 
-    # Plot setup
     fig, ax = plt.subplots(figsize=(10, 6))
     color_cycle = itertools.cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 
-    # Table to store Y-differences
+    # table to store uniformity
     diff_rows = []
 
     for file in uploaded_files:
         if not file_toggles[file.name]:
-            continue  # Skip files toggled OFF
+            continue  # skip files toggled OFF
 
         df = pd.read_excel(file, sheet_name=6, engine="openpyxl")
 
-        # Filter by HO/ZO and Donut/Tophat
-        df_f = df[(df.iloc[:, 3] == category_hozo) & (df.iloc[:, 7] == category_shape)]
+        # filter by HO/ZO, donut/tophat, and sample = 0 (omitting -1 and 1)
+        df_f = df[
+    (df.iloc[:, 3] == category_hozo) &
+    (df.iloc[:, 7] == category_shape) &
+    (df.iloc[:, 9] == 0)
+]
 
-        # Extract columns L and P
+
+        # extract columns L and P
         x = df_f.iloc[:, 11]
         y = df_f.iloc[:, 15]
 
-        # Apply x‑axis filtering
+        # apply x‑axis filtering
         mask = (x >= x_min) & (x <= x_max)
         x_f, y_f = x[mask], y[mask]
 
-        # Sort by x-value
+        # sort by x-value
         df_sorted = pd.DataFrame({"x": x_f, "y": y_f}).sort_values("x")
 
         if len(df_sorted) < 2:
@@ -109,19 +110,19 @@ if uploaded_files:
         #compute reduced band uniformity
         y_diff = abs(df_sorted["y"].max() - df_sorted["y"].min()) * 100
 
-        # Store for table
+        # store for table
         diff_rows.append({
             "File": file.name,
             "Uniformity": y_diff
         })
 
-        # Plot
+        # plot
         color = next(color_cycle)
         ax.scatter(df_sorted["x"], df_sorted["y"], s=40, color=color)
         ax.plot(df_sorted["x"], df_sorted["y"], label=f"{file.name}", color=color)
 
     # Toggle for fixed Y-axis range
-    use_fixed_y = st.checkbox("Use fixed Y-axis range (0.68 to 0.90)", value=False)
+    use_fixed_y = st.checkbox("Use fixed Y-axis range (0.68 to 0.95)", value=False)
 
     # Finalize plot
     ax.set_xlabel("Wavelength")
@@ -130,7 +131,7 @@ if uploaded_files:
     ax.grid(True)
     
     if use_fixed_y:
-        ax.set_ylim(0.68, 0.90)
+        ax.set_ylim(0.68, 0.95)
 
 
     # Legend below plot
